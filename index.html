@@ -1,0 +1,561 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>GenerateYourCap — AI Caption Studio</title>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.development.js"></script>
+    <script crossorigin src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.development.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.5/babel.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;600;700;900&family=Bebas+Neue&family=Permanent+Marker&family=Oswald:wght@700&family=Pacifico&family=Rajdhani:wght@700&family=Press+Start+2P&family=Cinzel:wght@700&family=Righteous&family=Dancing+Script:wght@700&display=swap" rel="stylesheet" />
+    <style>
+        *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+        html, body { height: 100%; background: #07070f; color: #e0e0f0; font-family: 'Outfit', sans-serif; }
+        #root { height: 100%; }
+        ::-webkit-scrollbar { width: 5px; height: 5px; }
+        ::-webkit-scrollbar-track { background: rgba(255,255,255,0.03); }
+        ::-webkit-scrollbar-thumb { background: rgba(0,229,255,0.25); border-radius: 4px; }
+        input[type=range] { accent-color: #00e5ff; }
+        input[type=color] { padding: 2px; background: rgba(255,255,255,0.05); border: 1px solid rgba(255,255,255,0.1); border-radius: 6px; cursor: pointer; }
+        textarea, button { font-family: inherit; }
+        @keyframes gyc-fade { from{opacity:0} to{opacity:1} }
+        @keyframes gyc-slideUp { from{opacity:0;transform:translate(-50%,calc(-50% + 18px))} to{opacity:1;transform:translate(-50%,-50%)} }
+        @keyframes gyc-slideDown { from{opacity:0;transform:translate(-50%,calc(-50% - 18px))} to{opacity:1;transform:translate(-50%,-50%)} }
+        @keyframes gyc-bounce { 0%,100%{transform:translate(-50%,-50%)} 50%{transform:translate(-50%,calc(-50% - 10px))} }
+        @keyframes gyc-flash { 0%,100%{opacity:1} 50%{opacity:0.1} }
+        @keyframes gyc-zoom { from{opacity:0;transform:translate(-50%,-50%) scale(0.4)} to{opacity:1;transform:translate(-50%,-50%) scale(1)} }
+        @keyframes gyc-typewriter { from{clip-path:inset(0 100% 0 0)} to{clip-path:inset(0 0% 0 0)} }
+        @keyframes gyc-marquee { 0%{left:110%;transform:translateY(-50%);} 100%{left:-110%;transform:translateY(-50%);} }
+        @keyframes gyc-pop { 0%{opacity:0;transform:translate(-50%,-50%) scale(0)} 60%{opacity:1;transform:translate(-50%,-50%) scale(1.25)} 80%{transform:translate(-50%,-50%) scale(0.9)} 100%{opacity:1;transform:translate(-50%,-50%) scale(1)} }
+        @keyframes gyc-shake { 0%,100%{transform:translate(-50%,-50%)} 15%{transform:translate(calc(-50% - 6px),-50%)} 30%{transform:translate(calc(-50% + 6px),-50%)} 45%{transform:translate(calc(-50% - 4px),-50%)} 60%{transform:translate(calc(-50% + 4px),-50%)} 75%{transform:translate(calc(-50% - 2px),-50%)} }
+        @keyframes gyc-glitch { 0%,100%{clip-path:inset(0 0 0 0);transform:translate(-50%,-50%)} 10%{clip-path:inset(10% 0 60% 0);transform:translate(calc(-50% + 3px),-50%)} 20%{clip-path:inset(50% 0 10% 0);transform:translate(calc(-50% - 3px),-50%)} 30%{clip-path:inset(0 0 0 0);transform:translate(-50%,-50%)} }
+        @keyframes gyc-flip { 0%{opacity:0;transform:translate(-50%,-50%) rotateX(90deg)} 60%{opacity:1;transform:translate(-50%,-50%) rotateX(-10deg)} 100%{opacity:1;transform:translate(-50%,-50%) rotateX(0deg)} }
+        @keyframes gyc-roll { 0%{opacity:0;transform:translate(-50%,-50%) rotate(-360deg) scale(0)} 100%{opacity:1;transform:translate(-50%,-50%) rotate(0deg) scale(1)} }
+        @keyframes gyc-neonpulse { 0%,100%{text-shadow:0 0 5px currentColor,0 0 20px currentColor,0 0 40px currentColor} 50%{text-shadow:0 0 2px currentColor,0 0 8px currentColor} }
+        @keyframes pulse-glow { 0%,100%{box-shadow:0 0 20px rgba(0,229,255,0.3)} 50%{box-shadow:0 0 40px rgba(0,229,255,0.7)} }
+        @keyframes bar-shine { 0%{left:-40%} 100%{left:110%} }
+        @keyframes float-up { from{opacity:0;transform:translateY(30px)} to{opacity:1;transform:translateY(0)} }
+        .upload-zone:hover { border-color:rgba(0,229,255,0.5)!important; background:rgba(0,229,255,0.06)!important; }
+        .preset-btn:hover { border-color:#00e5ff!important; background:rgba(0,229,255,0.07)!important; }
+        .timeline-chip:hover { background:rgba(255,255,255,0.08)!important; }
+        .pos-btn:hover { border-color:rgba(0,229,255,0.5)!important; }
+        .export-btn:hover { opacity:0.88; }
+        .dl-btn:hover { border-color:#00e5ff!important; color:#00e5ff!important; }
+    </style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useRef, useEffect, useCallback } = React;
+
+const FONTS = [
+    {name:"Impact",label:"Impact"},{name:"'Bebas Neue'",label:"Bebas Neue"},
+    {name:"'Oswald'",label:"Oswald"},{name:"'Rajdhani'",label:"Rajdhani"},
+    {name:"'Righteous'",label:"Righteous"},{name:"'Cinzel'",label:"Cinzel"},
+    {name:"'Pacifico'",label:"Pacifico"},{name:"'Permanent Marker'",label:"Marker"},
+    {name:"'Dancing Script'",label:"Dancing"},{name:"'Press Start 2P'",label:"8-Bit"},
+    {name:"Georgia",label:"Georgia"},{name:"'Courier New'",label:"Courier"},
+    {name:"'Comic Sans MS'",label:"Comic"},{name:"Verdana",label:"Verdana"},
+];
+
+const ANIMATIONS = [
+    {id:"none",label:"None"},{id:"fade",label:"Fade In"},{id:"slideUp",label:"Slide Up"},
+    {id:"slideDown",label:"Slide Down"},{id:"bounce",label:"Bounce"},{id:"flash",label:"Flash"},
+    {id:"zoom",label:"Zoom In"},{id:"typewriter",label:"Typewriter"},{id:"pop",label:"🎯 Pop"},
+    {id:"marquee",label:"📺 Marquee"},{id:"shake",label:"📳 Shake"},{id:"glitch",label:"⚡ Glitch"},
+    {id:"flip",label:"🔄 Flip"},{id:"roll",label:"🌀 Roll"},{id:"neonpulse",label:"💡 Neon Pulse"},
+];
+
+const PRESETS = [
+    {id:"netflix",label:"Netflix",color:"#ffffff",bg:"rgba(0,0,0,0.8)",font:"'Oswald'",size:22,position:"bottom",animation:"fade",stroke:"#000000"},
+    {id:"youtube",label:"YouTube",color:"#ffff00",bg:"rgba(0,0,0,0.6)",font:"'Rajdhani'",size:20,position:"bottom",animation:"none",stroke:"#000000"},
+    {id:"tiktok",label:"TikTok",color:"#ffffff",bg:"rgba(0,0,0,0)",font:"'Bebas Neue'",size:28,position:"bottom",animation:"slideUp",stroke:"#ff0050"},
+    {id:"cinematic",label:"Cinematic",color:"#f5e6c8",bg:"rgba(0,0,0,0)",font:"'Cinzel'",size:20,position:"bottom",animation:"fade",stroke:"none"},
+    {id:"meme",label:"Meme",color:"#ffffff",bg:"rgba(0,0,0,0)",font:"Impact",size:34,position:"top",animation:"none",stroke:"#000000"},
+    {id:"neon",label:"Neon",color:"#00ffff",bg:"rgba(0,0,0,0.55)",font:"'Righteous'",size:22,position:"bottom",animation:"neonpulse",stroke:"#ff00ff"},
+    {id:"retro",label:"Retro 8-bit",color:"#00ff00",bg:"rgba(0,0,0,0.85)",font:"'Press Start 2P'",size:12,position:"bottom",animation:"typewriter",stroke:"none"},
+    {id:"pop",label:"Pop!",color:"#fff700",bg:"rgba(255,0,80,0.85)",font:"'Permanent Marker'",size:28,position:"center",animation:"pop",stroke:"#000000"},
+    {id:"glitch",label:"Glitch",color:"#ff003c",bg:"rgba(0,0,0,0)",font:"'Courier New'",size:24,position:"center",animation:"glitch",stroke:"#00ffff"},
+    {id:"bold",label:"Bold Drop",color:"#ffffff",bg:"rgba(0,0,0,0)",font:"'Bebas Neue'",size:36,position:"center",animation:"zoom",stroke:"#111111"},
+    {id:"elegant",label:"Elegant",color:"#f0d9a8",bg:"rgba(0,0,0,0)",font:"'Dancing Script'",size:26,position:"bottom",animation:"fade",stroke:"none"},
+    {id:"shake",label:"Shake It",color:"#ffffff",bg:"rgba(255,60,0,0.7)",font:"'Oswald'",size:24,position:"bottom",animation:"shake",stroke:"#000000"},
+];
+
+const POSITIONS = {
+    top:{x:50,y:8}, bottom:{x:50,y:88}, left:{x:15,y:50}, right:{x:85,y:50}, center:{x:50,y:50},
+};
+
+const BG_SWATCHES = [
+    {value:"rgba(0,0,0,0)",transparent:true},{value:"rgba(0,0,0,0.4)",transparent:false},
+    {value:"rgba(0,0,0,0.75)",transparent:false},{value:"rgba(0,0,0,0.95)",transparent:false},
+    {value:"rgba(255,255,255,0.18)",transparent:false},{value:"rgba(0,229,255,0.22)",transparent:false},
+    {value:"rgba(123,47,255,0.3)",transparent:false},{value:"rgba(255,0,80,0.25)",transparent:false},
+    {value:"rgba(255,200,0,0.3)",transparent:false},{value:"rgba(0,255,100,0.2)",transparent:false},
+];
+
+function animCSS(anim) {
+    const m = {
+        fade:"gyc-fade 0.4s ease forwards", slideUp:"gyc-slideUp 0.4s ease forwards",
+        slideDown:"gyc-slideDown 0.4s ease forwards", bounce:"gyc-bounce 0.75s ease infinite",
+        flash:"gyc-flash 1s ease infinite", zoom:"gyc-zoom 0.45s ease forwards",
+        typewriter:"gyc-typewriter 0.6s steps(20) forwards",
+        pop:"gyc-pop 0.5s cubic-bezier(.36,.07,.19,.97) forwards",
+        shake:"gyc-shake 0.5s ease forwards", glitch:"gyc-glitch 0.6s steps(1) infinite",
+        flip:"gyc-flip 0.5s ease forwards", roll:"gyc-roll 0.6s ease forwards",
+        neonpulse:"gyc-neonpulse 1.5s ease infinite", marquee:null,
+    };
+    return m[anim] || "none";
+}
+
+const C = {cyan:"#00e5ff",purple:"#7b2fff",bg:"#07070f",panel:"rgba(255,255,255,0.025)",border:"rgba(255,255,255,0.08)"};
+
+function Label({children}) { return <div style={{fontSize:10,color:"#666",letterSpacing:1.8,textTransform:"uppercase",marginBottom:5}}>{children}</div>; }
+function Pill({active,onClick,children,font}) { return <button onClick={onClick} style={{padding:"5px 11px",borderRadius:8,fontSize:12,cursor:"pointer",fontFamily:font||"inherit",border:active?`1.5px solid ${C.cyan}`:`1px solid ${C.border}`,background:active?"rgba(0,229,255,0.13)":"rgba(255,255,255,0.03)",color:active?C.cyan:"#bbb",transition:"all 0.15s"}}>{children}</button>; }
+function Toggle({active,onClick,label}) { return <button onClick={onClick} style={{flex:1,padding:"8px 0",borderRadius:8,cursor:"pointer",border:active?`1.5px solid ${C.cyan}`:`1px solid ${C.border}`,background:active?"rgba(0,229,255,0.13)":"rgba(255,255,255,0.03)",color:active?C.cyan:"#777",fontSize:13,fontWeight:700,transition:"all 0.15s"}}>{label}</button>; }
+function SectionDivider({label}) { return <div style={{display:"flex",alignItems:"center",gap:10,margin:"4px 0"}}><div style={{flex:1,height:1,background:C.border}}/><span style={{fontSize:9,color:"#444",letterSpacing:2,textTransform:"uppercase"}}>{label}</span><div style={{flex:1,height:1,background:C.border}}/></div>; }
+
+function App() {
+    const [stage,setStage] = useState("upload");
+    const [videoFile,setVideoFile] = useState(null);
+    const [isGenerating,setIsGenerating] = useState(false);
+    const [isExporting,setIsExporting] = useState(false);
+    const [videoURL,setVideoURL] = useState(null);
+    const [captions,setCaptions] = useState([]);
+    const [selectedCap,setSelectedCap] = useState(null);
+    const [progress,setProgress] = useState(0);
+    const [progressLabel,setProgressLabel] = useState("Initializing…");
+    const [tab,setTab] = useState("style");
+    const [currentTime,setCurrentTime] = useState(0);
+    const [activeCaption,setActiveCaption] = useState(null);
+    const [dragging,setDragging] = useState(false);
+    const [dragStart,setDragStart] = useState(null);
+    const [captionPos,setCaptionPos] = useState({x:50,y:88});
+    const [animKey,setAnimKey] = useState(0);
+    const [scrollHint,setScrollHint] = useState(true);
+    const [translate,setTranslate] = useState(false);
+    const [exportStatus,setExportStatus] = useState("");
+    const [style,setStyle] = useState({color:"#ffffff",bg:"rgba(0,0,0,0.7)",font:"'Bebas Neue'",size:28,position:"bottom",animation:"fade",stroke:"#000000",bold:true,italic:false});
+
+    const videoRef = useRef(null);
+    const previewRef = useRef(null);
+    const fileInputRef = useRef(null);
+    const prevAnimRef = useRef("fade");
+
+    useEffect(() => {
+        const a = captions.find(c => currentTime >= c.start && currentTime < c.end) || null;
+        setActiveCaption(a);
+    }, [currentTime,captions]);
+
+    useEffect(() => {
+        if (prevAnimRef.current !== style.animation) { prevAnimRef.current = style.animation; setAnimKey(k=>k+1); }
+    }, [style.animation]);
+
+    useEffect(() => { setAnimKey(k=>k+1); }, [activeCaption && activeCaption.id]);
+
+    useEffect(() => {
+        const handleWheel = (e) => {
+            if (!previewRef.current || !previewRef.current.contains(e.target)) return;
+            e.preventDefault();
+            setScrollHint(false);
+            setStyle(s => ({...s, size:Math.max(8,Math.min(120,s.size+(e.deltaY<0?2:-2)))}));
+        };
+        window.addEventListener("wheel", handleWheel, {passive:false});
+        return () => window.removeEventListener("wheel", handleWheel);
+    }, []);
+
+    const handleFile = (file) => { if (!file) return; setVideoFile(file); setVideoURL(URL.createObjectURL(file)); };
+    const handleDrop = (e) => { e.preventDefault(); const f=e.dataTransfer.files[0]; if(f&&f.type.startsWith("video/")) handleFile(f); };
+
+    const handleGenerate = async () => {
+        if (isGenerating) return;
+        if (!videoFile) { alert("Upload video first"); return; }
+        const jobId = Date.now().toString();
+        try {
+            setIsGenerating(true); setStage("generating"); setProgress(0); setProgressLabel("Connecting...");
+            const evtSource = new EventSource(`https://generatecap-backend.onrender.com/progress/${jobId}`);
+            evtSource.onmessage = (e) => {
+                const d = JSON.parse(e.data);
+                setProgress(d.percent); setProgressLabel(d.label);
+                if (d.percent >= 100) evtSource.close();
+            };
+            evtSource.onerror = () => evtSource.close();
+            const formData = new FormData();
+            formData.append("video", videoFile);
+            formData.append("jobId", jobId);
+            formData.append("translate", translate ? "true" : "false");
+            const res = await fetch("https://generatecap-backend.onrender.com/generate", {method:"POST",body:formData});
+            evtSource.close();
+            if (!res.ok) throw new Error("Server error");
+            const data = await res.json();
+            setCaptions(data); setStage("editor");
+        } catch (err) {
+            console.error(err); alert(err.message); setStage("upload");
+        } finally { setIsGenerating(false); }
+    };
+
+    // ── EXPORT ──────────────────────────────────────────────────────────────
+    const handleExport = async () => {
+        if (!videoFile || captions.length === 0) { alert("Pehle video upload karo aur captions generate karo!"); return; }
+        if (isExporting) return;
+        try {
+            setIsExporting(true);
+            setExportStatus("⏳ Exporting... please wait");
+            const formData = new FormData();
+            formData.append("video", videoFile);
+            formData.append("captions", JSON.stringify(captions));
+            formData.append("style", JSON.stringify(style));
+            const res = await fetch("https://generatecap-backend.onrender.com/export", {method:"POST",body:formData});
+            if (!res.ok) throw new Error("Export failed");
+            const blob = await res.blob();
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement("a");
+            a.href = url; a.download = "GenerateYourCap_export.mp4"; a.click();
+            URL.revokeObjectURL(url);
+            setExportStatus("✅ Export done! Check downloads.");
+            setTimeout(() => setExportStatus(""), 4000);
+        } catch (err) {
+            console.error(err); alert("Export failed: " + err.message);
+            setExportStatus("");
+        } finally { setIsExporting(false); }
+    };
+
+    // ── SRT / VTT ───────────────────────────────────────────────────────────
+    const downloadSRT = () => {
+        const pad = (n) => String(Math.floor(n)).padStart(2,"0");
+        const toSRTTime = (s) => `${pad(s/3600)}:${pad((s%3600)/60)}:${pad(s%60)},${String(Math.round((s%1)*1000)).padStart(3,"0")}`;
+        const srt = captions.map(c=>`${c.id}\n${toSRTTime(c.start)} --> ${toSRTTime(c.end)}\n${c.text}`).join("\n\n");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([srt],{type:"text/plain"}));
+        a.download = "captions.srt"; a.click();
+    };
+
+    const downloadVTT = () => {
+        const pad2 = (n) => String(Math.floor(n)).padStart(2,"0");
+        const toVTTTime = (s) => `${pad2(s/3600)}:${pad2((s%3600)/60)}:${pad2(s%60)}.${String(Math.round((s%1)*1000)).padStart(3,"0")}`;
+        const vtt = "WEBVTT\n\n" + captions.map(c=>`${toVTTTime(c.start)} --> ${toVTTTime(c.end)}\n${c.text}`).join("\n\n");
+        const a = document.createElement("a");
+        a.href = URL.createObjectURL(new Blob([vtt],{type:"text/vtt"}));
+        a.download = "captions.vtt"; a.click();
+    };
+
+    const applyPreset = (preset) => {
+        setStyle(s=>({...s,color:preset.color,bg:preset.bg,font:preset.font,size:preset.size,position:preset.position,animation:preset.animation,stroke:preset.stroke}));
+        setCaptionPos(POSITIONS[preset.position]); setAnimKey(k=>k+1);
+    };
+
+    const updateCaption = (id,text) => setCaptions(cs=>cs.map(c=>c.id===id?{...c,text}:c));
+
+    const startDrag = (mx,my) => {
+        if (style.animation==="marquee") return;
+        setDragging(true); setDragStart({mx,my,px:captionPos.x,py:captionPos.y});
+    };
+    const moveDrag = useCallback((mx,my) => {
+        if (!dragging||!dragStart||!previewRef.current) return;
+        const rect = previewRef.current.getBoundingClientRect();
+        setCaptionPos({
+            x:Math.max(5,Math.min(95,dragStart.px+((mx-dragStart.mx)/rect.width)*100)),
+            y:Math.max(5,Math.min(95,dragStart.py+((my-dragStart.my)/rect.height)*100)),
+        });
+    }, [dragging,dragStart]);
+    const endDrag = useCallback(() => setDragging(false), []);
+
+    useEffect(() => {
+        const mm = e => moveDrag(e.clientX,e.clientY);
+        window.addEventListener("mousemove",mm); window.addEventListener("mouseup",endDrag);
+        return () => { window.removeEventListener("mousemove",mm); window.removeEventListener("mouseup",endDrag); };
+    }, [moveDrag,endDrag]);
+
+    const isMarquee = style.animation==="marquee";
+    const capStyle = {
+        position:"absolute", left:isMarquee?"110%":`${captionPos.x}%`, top:`${captionPos.y}%`,
+        transform:isMarquee?"translateY(-50%)":"translate(-50%,-50%)",
+        fontFamily:style.font, fontSize:`${style.size}px`, color:style.color,
+        background:style.bg, padding:"6px 16px", borderRadius:5,
+        fontWeight:style.bold?"bold":"normal", fontStyle:style.italic?"italic":"normal",
+        WebkitTextStroke:style.stroke&&style.stroke!=="none"?`1.5px ${style.stroke}`:"0px",
+        cursor:dragging?"grabbing":"grab", userSelect:"none",
+        maxWidth:isMarquee?"none":"84%", textAlign:"center", whiteSpace:"pre-wrap",
+        zIndex:10, boxShadow:"0 2px 18px rgba(0,0,0,0.6)",
+        animation:isMarquee?"gyc-marquee 4s linear infinite":animCSS(style.animation),
+    };
+
+    return (
+        <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",background:"linear-gradient(140deg,#07070f 0%,#0d0d1f 55%,#060d14 100%)"}}>
+
+            {/* HEADER */}
+            <header style={{padding:"14px 28px",display:"flex",alignItems:"center",justifyContent:"space-between",borderBottom:`1px solid ${C.border}`,background:"rgba(7,7,15,0.92)",backdropFilter:"blur(16px)",position:"sticky",top:0,zIndex:300}}>
+                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                    <div style={{width:38,height:38,borderRadius:10,background:`linear-gradient(135deg,${C.cyan},${C.purple})`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:18,fontWeight:900,color:"#fff",boxShadow:`0 0 18px rgba(0,229,255,0.4)`,animation:"pulse-glow 3s ease infinite"}}>G</div>
+                    <div>
+                        <div style={{fontSize:20,fontWeight:900,letterSpacing:0.3,color:"#fff"}}>Generate<span style={{color:C.cyan}}>YourCap</span></div>
+                        <div style={{fontSize:9,color:"#444",letterSpacing:2.5,textTransform:"uppercase"}}>AI Caption Studio</div>
+                    </div>
+                </div>
+                <div style={{display:"flex",gap:10,alignItems:"center"}}>
+                    {stage==="editor" && (<>
+                        <button onClick={()=>{setStage("upload");setVideoFile(null);setVideoURL(null);setCaptions([]);}}
+                            style={{padding:"8px 16px",borderRadius:8,border:`1px solid ${C.border}`,background:"transparent",color:"#888",fontSize:12,cursor:"pointer"}}>← New Video</button>
+                        <button className="dl-btn" onClick={downloadSRT}
+                            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,color:"#aaa",padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>⬇ SRT</button>
+                        <button className="dl-btn" onClick={downloadVTT}
+                            style={{background:"transparent",border:`1px solid ${C.border}`,borderRadius:8,color:"#aaa",padding:"10px 16px",fontSize:13,fontWeight:700,cursor:"pointer",transition:"all 0.15s"}}>⬇ VTT</button>
+                        <button className="export-btn" onClick={handleExport} disabled={isExporting}
+                            style={{background:isExporting?"#333":`linear-gradient(90deg,${C.cyan},${C.purple})`,border:"none",borderRadius:8,color:"#fff",padding:"10px 24px",fontSize:13,fontWeight:700,cursor:isExporting?"not-allowed":"pointer",letterSpacing:0.8,boxShadow:"0 0 20px rgba(0,229,255,0.25)",transition:"all 0.2s"}}>
+                            {isExporting ? "⏳ Exporting..." : "⬇ Export Video"}
+                        </button>
+                    </>)}
+                </div>
+            </header>
+
+            {/* EXPORT STATUS TOAST */}
+            {exportStatus && (
+                <div style={{position:"fixed",bottom:24,left:"50%",transform:"translateX(-50%)",background:"#0e0e1f",border:`1px solid ${C.cyan}`,borderRadius:12,padding:"12px 24px",color:C.cyan,fontWeight:700,fontSize:14,zIndex:999,boxShadow:"0 0 30px rgba(0,229,255,0.3)"}}>
+                    {exportStatus}
+                </div>
+            )}
+
+            {/* UPLOAD STAGE */}
+            {stage==="upload" && (
+                <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",animation:"float-up 0.5s ease"}}>
+                    <div style={{textAlign:"center",marginBottom:48}}>
+                        <div style={{fontSize:52,fontWeight:900,color:"#fff",lineHeight:1.1,letterSpacing:-1}}>
+                            Auto Caption<br/>
+                            <span style={{background:`linear-gradient(90deg,${C.cyan},${C.purple})`,WebkitBackgroundClip:"text",WebkitTextFillColor:"transparent",backgroundClip:"text"}}>Your Video</span>
+                        </div>
+                        <div style={{color:"#555",marginTop:14,fontSize:15}}>Upload → Generate → Customize → Export. Done.</div>
+                        <div style={{display:"flex",gap:20,justifyContent:"center",marginTop:20,flexWrap:"wrap"}}>
+                            {["AI Transcription","Drag & Drop","15 Animations","14 Fonts","SRT & VTT","Export MP4"].map(f=>(
+                                <div key={f} style={{fontSize:11,color:"#444",display:"flex",alignItems:"center",gap:5}}>
+                                    <span style={{color:C.cyan}}>✓</span> {f}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                    <div className="upload-zone" onDrop={handleDrop} onDragOver={e=>e.preventDefault()} onClick={()=>fileInputRef.current&&fileInputRef.current.click()}
+                        style={{width:"100%",maxWidth:520,minHeight:240,border:videoFile?`2px solid ${C.cyan}`:"2px dashed rgba(100,180,255,0.2)",borderRadius:20,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:14,cursor:"pointer",padding:32,background:videoFile?"rgba(0,229,255,0.04)":"rgba(255,255,255,0.015)",transition:"all 0.25s"}}>
+                        {videoFile ? (<>
+                            <video src={videoURL} style={{maxWidth:"100%",maxHeight:160,borderRadius:10,boxShadow:"0 4px 20px rgba(0,0,0,0.5)"}} controls/>
+                            <div style={{color:C.cyan,fontWeight:700,fontSize:14}}>{videoFile.name}</div>
+                            <div style={{color:"#444",fontSize:11}}>Click to change file</div>
+                        </>) : (<>
+                            <div style={{fontSize:52}}>🎬</div>
+                            <div style={{color:"#aaa",fontSize:16}}>Drop your video here or click to browse</div>
+                            <div style={{color:"#444",fontSize:12,display:"flex",gap:10}}>
+                                {["MP4","MOV","AVI","WebM","MKV"].map(f=>(
+                                    <span key={f} style={{padding:"2px 8px",borderRadius:4,background:"rgba(255,255,255,0.05)",border:`1px solid ${C.border}`}}>{f}</span>
+                                ))}
+                            </div>
+                        </>)}
+                    </div>
+                    <input ref={fileInputRef} type="file" accept="video/*" style={{display:"none"}} onChange={e=>handleFile(e.target.files[0])}/>
+                    {videoFile && (
+                        <div style={{marginTop:20,display:"flex",alignItems:"center",gap:10}}>
+                            <div onClick={()=>setTranslate(t=>!t)}
+                                style={{display:"flex",alignItems:"center",gap:8,cursor:"pointer",padding:"8px 16px",borderRadius:20,border:`1px solid ${translate?C.cyan:C.border}`,background:translate?"rgba(0,229,255,0.1)":"transparent",transition:"all 0.2s"}}>
+                                <div style={{width:16,height:16,borderRadius:3,border:`2px solid ${translate?C.cyan:"#555"}`,background:translate?C.cyan:"transparent",transition:"all 0.2s",display:"flex",alignItems:"center",justifyContent:"center",fontSize:10,color:"#000"}}>
+                                    {translate?"✓":""}
+                                </div>
+                                <span style={{color:translate?C.cyan:"#666",fontSize:13}}>🌍 Auto-translate to English</span>
+                            </div>
+                        </div>
+                    )}
+                    {videoFile && (
+                        <button type="button" disabled={isGenerating} onClick={handleGenerate}
+                            style={{opacity:isGenerating?0.5:1,pointerEvents:isGenerating?"none":"auto",marginTop:20,padding:"16px 54px",fontSize:18,fontWeight:800,background:`linear-gradient(90deg,${C.cyan},${C.purple})`,border:"none",borderRadius:50,color:"#fff",cursor:"pointer"}}>
+                            {isGenerating?"⏳ Generating...":"✨ Generate Captions"}
+                        </button>
+                    )}
+                </div>
+            )}
+
+            {/* GENERATING STAGE */}
+            {stage==="generating" && (
+                <div style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",gap:26,padding:40}}>
+                    <div style={{fontSize:36,fontWeight:900,color:"#fff"}}>Analyzing Audio…</div>
+                    <div style={{width:420,maxWidth:"88vw"}}>
+                        <div style={{height:8,background:"rgba(255,255,255,0.07)",borderRadius:10,overflow:"hidden",position:"relative"}}>
+                            <div style={{height:"100%",width:`${Math.min(100,progress)}%`,background:`linear-gradient(90deg,${C.cyan},${C.purple})`,borderRadius:10,transition:"width 0.4s",boxShadow:"0 0 12px rgba(0,229,255,0.5)",position:"relative",overflow:"hidden"}}>
+                                <div style={{position:"absolute",inset:0,background:"linear-gradient(90deg,transparent,rgba(255,255,255,0.3),transparent)",animation:"bar-shine 1.5s ease infinite",width:"40%"}}/>
+                            </div>
+                        </div>
+                        <div style={{display:"flex",justifyContent:"space-between",marginTop:8}}>
+                            <span style={{color:"#555",fontSize:12}}>{progressLabel}</span>
+                            <span style={{color:C.cyan,fontSize:14,fontWeight:700}}>{Math.min(100,Math.round(progress))}%</span>
+                        </div>
+                    </div>
+                    <div style={{display:"flex",gap:24,marginTop:10}}>
+                        {["Extracting Audio","Transcribing","Syncing","Building"].map((s,i)=>(
+                            <div key={s} style={{textAlign:"center",opacity:progress>i*25?1:0.25,transition:"opacity 0.5s"}}>
+                                <div style={{fontSize:20,marginBottom:4}}>{"🎵🗣️⏱️📝"[i]}</div>
+                                <div style={{fontSize:10,color:"#555",letterSpacing:1}}>{s}</div>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
+            {/* EDITOR STAGE */}
+            {stage==="editor" && (
+                <div style={{flex:1,display:"flex",flexDirection:"column",overflow:"hidden",minHeight:0}}>
+                    <div style={{display:"flex",flex:1,overflow:"hidden",flexWrap:"wrap",minHeight:0}}>
+                        <div style={{flex:"1 1 380px",display:"flex",flexDirection:"column",padding:18,gap:10,minWidth:280,overflow:"auto"}}>
+                            <div style={{fontSize:9,color:"#444",letterSpacing:2.2,textTransform:"uppercase"}}>
+                                Preview — drag to reposition · <span style={{color:C.cyan}}>scroll to resize</span>
+                            </div>
+                            <div ref={previewRef} style={{position:"relative",borderRadius:14,overflow:"hidden",background:"#000",boxShadow:"0 0 40px rgba(0,0,0,0.8)",cursor:dragging?"grabbing":"default",flexShrink:0}}
+                                onTouchMove={e=>{const t=e.touches[0];moveDrag(t.clientX,t.clientY);}} onTouchEnd={endDrag}>
+                                <video ref={videoRef} src={videoURL} style={{width:"100%",display:"block",maxHeight:"52vh"}} controls onTimeUpdate={e=>setCurrentTime(e.target.currentTime)}/>
+                                {activeCaption && (
+                                    <div key={`cap-${animKey}`} style={capStyle}
+                                        onMouseDown={e=>{e.preventDefault();startDrag(e.clientX,e.clientY);}}
+                                        onTouchStart={e=>{const t=e.touches[0];startDrag(t.clientX,t.clientY);}}>
+                                        {activeCaption.text}
+                                    </div>
+                                )}
+                                {activeCaption && !dragging && (
+                                    <div style={{position:"absolute",bottom:8,right:10,fontSize:9,color:"rgba(255,255,255,0.25)",pointerEvents:"none",letterSpacing:1}}>
+                                        {scrollHint?"🖱️ scroll to resize · ✥ drag":"✥ drag caption"}
+                                    </div>
+                                )}
+                                {activeCaption && (<div style={{position:"absolute",top:8,left:10,fontSize:9,color:"rgba(0,229,255,0.6)",pointerEvents:"none",background:"rgba(0,0,0,0.5)",padding:"2px 7px",borderRadius:4}}>{style.size}px</div>)}
+                            </div>
+                            <div style={{display:"flex",gap:6,flexWrap:"wrap",alignItems:"center"}}>
+                                <span style={{fontSize:9,color:"#444",letterSpacing:1.5,textTransform:"uppercase",marginRight:4}}>Snap to:</span>
+                                {Object.keys(POSITIONS).map(pos=>(
+                                    <button key={pos} className="pos-btn" onClick={()=>{setStyle(s=>({...s,position:pos}));setCaptionPos(POSITIONS[pos]);}}
+                                        style={{padding:"4px 12px",borderRadius:20,fontSize:10,cursor:"pointer",border:style.position===pos?`1.5px solid ${C.cyan}`:`1px solid ${C.border}`,background:style.position===pos?"rgba(0,229,255,0.12)":"rgba(255,255,255,0.03)",color:style.position===pos?C.cyan:"#666",textTransform:"capitalize",letterSpacing:0.8,transition:"border-color 0.15s"}}>
+                                        {pos}
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={{display:"flex",gap:6,alignItems:"center",flexWrap:"wrap"}}>
+                                <span style={{fontSize:9,color:"#444",letterSpacing:1.5,textTransform:"uppercase",marginRight:4}}>Quick size:</span>
+                                {[16,20,24,28,32,40,52,72].map(sz=>(
+                                    <button key={sz} onClick={()=>setStyle(s=>({...s,size:sz}))}
+                                        style={{padding:"3px 9px",borderRadius:6,fontSize:10,cursor:"pointer",border:style.size===sz?`1.5px solid ${C.cyan}`:`1px solid ${C.border}`,background:style.size===sz?"rgba(0,229,255,0.12)":"rgba(255,255,255,0.03)",color:style.size===sz?C.cyan:"#666"}}>
+                                        {sz}
+                                    </button>
+                                ))}
+                            </div>
+                            {activeCaption && (
+                                <div style={{padding:"10px 14px",borderRadius:10,background:"rgba(0,229,255,0.06)",border:`1px solid rgba(0,229,255,0.12)`,fontSize:12}}>
+                                    <span style={{color:"#555"}}>Now showing: </span>
+                                    <span style={{color:C.cyan,fontWeight:600}}>"{activeCaption.text}"</span>
+                                    <span style={{color:"#555"}}> ({activeCaption.start}s–{activeCaption.end}s)</span>
+                                </div>
+                            )}
+                        </div>
+
+                        <div style={{width:316,flexShrink:0,borderLeft:`1px solid ${C.border}`,display:"flex",flexDirection:"column",overflow:"hidden"}}>
+                            <div style={{display:"flex",borderBottom:`1px solid ${C.border}`,flexShrink:0}}>
+                                {[["style","🎨","Style"],["text","✏️","Text"],["presets","🎬","Presets"]].map(([id,icon,lbl])=>(
+                                    <button key={id} onClick={()=>setTab(id)} style={{flex:1,padding:"13px 0",border:"none",background:tab===id?"rgba(0,229,255,0.07)":"transparent",color:tab===id?C.cyan:"#555",fontWeight:tab===id?700:400,fontSize:12,cursor:"pointer",letterSpacing:0.6,borderBottom:tab===id?`2px solid ${C.cyan}`:"2px solid transparent",transition:"color 0.15s,background 0.15s"}}>
+                                        {icon} {lbl}
+                                    </button>
+                                ))}
+                            </div>
+                            <div style={{flex:1,overflowY:"auto",padding:16}}>
+                                {tab==="style" && (
+                                    <div style={{display:"flex",flexDirection:"column",gap:16}}>
+                                        <div>
+                                            <Label>Font Family</Label>
+                                            <div style={{display:"flex",flexWrap:"wrap",gap:5,marginTop:6}}>
+                                                {FONTS.map(f=><Pill key={f.name} active={style.font===f.name} font={f.name} onClick={()=>setStyle(s=>({...s,font:f.name}))}>{f.label}</Pill>)}
+                                            </div>
+                                        </div>
+                                        <SectionDivider label="Size & Weight"/>
+                                        <div>
+                                            <Label>Font Size — {style.size}px &nbsp;<span style={{color:"#555",fontSize:9}}>(or scroll on preview)</span></Label>
+                                            <input type="range" min={8} max={120} value={style.size} onChange={e=>setStyle(s=>({...s,size:+e.target.value}))} style={{width:"100%",marginTop:6}}/>
+                                            <div style={{display:"flex",justifyContent:"space-between",marginTop:3}}><span style={{fontSize:9,color:"#444"}}>8</span><span style={{fontSize:9,color:"#444"}}>120</span></div>
+                                        </div>
+                                        <div style={{display:"flex",gap:8}}>
+                                            <Toggle active={style.bold} onClick={()=>setStyle(s=>({...s,bold:!s.bold}))} label="𝐁 Bold"/>
+                                            <Toggle active={style.italic} onClick={()=>setStyle(s=>({...s,italic:!s.italic}))} label="𝘐 Italic"/>
+                                        </div>
+                                        <SectionDivider label="Colors"/>
+                                        <div style={{display:"flex",gap:12}}>
+                                            <div style={{flex:1}}><Label>Text Color</Label><input type="color" value={style.color} onChange={e=>setStyle(s=>({...s,color:e.target.value}))} style={{width:"100%",height:36,marginTop:5}}/></div>
+                                            <div style={{flex:1}}><Label>Stroke Color</Label><input type="color" value={style.stroke==="none"?"#000000":style.stroke} onChange={e=>setStyle(s=>({...s,stroke:e.target.value}))} style={{width:"100%",height:36,marginTop:5}}/></div>
+                                        </div>
+                                        <div>
+                                            <Label>Background</Label>
+                                            <div style={{display:"flex",gap:6,marginTop:7,flexWrap:"wrap"}}>
+                                                {BG_SWATCHES.map((opt,i)=>(
+                                                    <div key={i} onClick={()=>setStyle(s=>({...s,bg:opt.value}))}
+                                                        style={{width:32,height:32,borderRadius:8,cursor:"pointer",background:opt.transparent?"linear-gradient(45deg,#555 25%,#222 25%,#222 50%,#555 50%,#555 75%,#222 75%)":opt.value,backgroundSize:opt.transparent?"8px 8px":undefined,border:style.bg===opt.value?`2.5px solid ${C.cyan}`:`1px solid ${C.border}`,transition:"border-color 0.15s"}}/>
+                                                ))}
+                                            </div>
+                                        </div>
+                                        <SectionDivider label="Animation"/>
+                                        <div style={{display:"flex",flexWrap:"wrap",gap:5}}>
+                                            {ANIMATIONS.map(a=><Pill key={a.id} active={style.animation===a.id} onClick={()=>setStyle(s=>({...s,animation:a.id}))}>{a.label}</Pill>)}
+                                        </div>
+                                    </div>
+                                )}
+                                {tab==="text" && (
+                                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                                        <div style={{color:"#555",fontSize:11,marginBottom:6,lineHeight:1.6}}>Click a caption to edit. Changes reflect live on preview.</div>
+                                        {captions.map(c=>(
+                                            <div key={c.id} onClick={()=>setSelectedCap(c.id===selectedCap?null:c.id)}
+                                                style={{borderRadius:10,overflow:"hidden",border:selectedCap===c.id?`1px solid ${C.cyan}`:`1px solid ${C.border}`,background:selectedCap===c.id?"rgba(0,229,255,0.05)":"rgba(255,255,255,0.02)",cursor:"pointer",transition:"border-color 0.15s"}}>
+                                                <div style={{padding:"8px 12px",display:"flex",justifyContent:"space-between",alignItems:"center"}}>
+                                                    <div style={{display:"flex",alignItems:"center",gap:8}}>
+                                                        <span style={{fontSize:10,color:C.cyan,fontFamily:"monospace",background:"rgba(0,229,255,0.1)",padding:"2px 6px",borderRadius:4}}>{c.start}s – {c.end}s</span>
+                                                        {activeCaption&&activeCaption.id===c.id&&<span style={{fontSize:9,color:"#555",background:"rgba(255,255,255,0.05)",padding:"2px 6px",borderRadius:4}}>PLAYING</span>}
+                                                    </div>
+                                                    <span style={{fontSize:11,color:"#444"}}>{selectedCap===c.id?"▲":"▼"}</span>
+                                                </div>
+                                                {selectedCap===c.id?(
+                                                    <textarea value={c.text} onChange={e=>updateCaption(c.id,e.target.value)} onClick={e=>e.stopPropagation()}
+                                                        style={{width:"100%",background:"rgba(0,0,0,0.5)",border:"none",borderTop:`1px solid rgba(0,229,255,0.15)`,color:"#fff",padding:"10px 12px",fontSize:13,fontFamily:style.font,resize:"vertical",minHeight:60,outline:"none",boxSizing:"border-box"}}/>
+                                                ):(
+                                                    <div style={{padding:"0 12px 10px",fontSize:13,color:"#bbb"}}>{c.text}</div>
+                                                )}
+                                            </div>
+                                        ))}
+                                    </div>
+                                )}
+                                {tab==="presets" && (
+                                    <div style={{display:"flex",flexDirection:"column",gap:10}}>
+                                        <div style={{color:"#555",fontSize:11,marginBottom:6}}>One-click style presets:</div>
+                                        {PRESETS.map(preset=>(
+                                            <button key={preset.id} className="preset-btn" onClick={()=>applyPreset(preset)}
+                                                style={{padding:"12px 14px",borderRadius:11,border:`1px solid ${C.border}`,background:"rgba(255,255,255,0.02)",cursor:"pointer",display:"flex",alignItems:"center",justifyContent:"space-between",transition:"all 0.2s"}}>
+                                                <div style={{display:"flex",alignItems:"center",gap:12}}>
+                                                    <div style={{padding:"4px 10px",borderRadius:6,fontSize:14,fontWeight:"bold",fontFamily:preset.font,color:preset.color,background:preset.bg==="rgba(0,0,0,0)"?"#111":preset.bg,WebkitTextStroke:preset.stroke&&preset.stroke!=="none"?`0.5px ${preset.stroke}`:"0px",flexShrink:0}}>Abc</div>
+                                                    <div style={{textAlign:"left"}}>
+                                                        <div style={{color:"#ddd",fontSize:13,fontWeight:700}}>{preset.label}</div>
+                                                        <div style={{color:"#444",fontSize:10,marginTop:1}}>{preset.animation!=="none"?`✦ ${preset.animation}`:"static"} · {preset.position}</div>
+                                                    </div>
+                                                </div>
+                                                <span style={{color:"#333",fontSize:12}}>→</span>
+                                            </button>
+                                        ))}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                    <div style={{borderTop:`1px solid ${C.border}`,padding:"10px 18px",background:"rgba(0,0,0,0.5)",flexShrink:0}}>
+                        <div style={{fontSize:9,color:"#333",letterSpacing:2.5,textTransform:"uppercase",marginBottom:8}}>Caption Timeline — click to jump</div>
+                        <div style={{display:"flex",gap:7,overflowX:"auto",paddingBottom:4}}>
+                            {captions.map(c=>(
+                                <div key={c.id} className="timeline-chip" onClick={()=>{if(videoRef.current)videoRef.current.currentTime=c.start;}}
+                                    style={{flexShrink:0,padding:"7px 14px",borderRadius:8,cursor:"pointer",background:activeCaption&&activeCaption.id===c.id?"rgba(0,229,255,0.18)":"rgba(255,255,255,0.04)",border:activeCaption&&activeCaption.id===c.id?`1px solid ${C.cyan}`:`1px solid ${C.border}`,fontSize:11,color:activeCaption&&activeCaption.id===c.id?C.cyan:"#888",transition:"all 0.2s"}}>
+                                    <div style={{fontSize:9,color:"#444",marginBottom:2,fontFamily:"monospace"}}>{c.start}s</div>
+                                    {c.text.length>24?c.text.slice(0,24)+"…":c.text}
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                </div>
+            )}
+        </div>
+    );
+}
+
+ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
+</script>
+</body>
+</html>
