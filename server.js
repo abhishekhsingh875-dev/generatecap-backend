@@ -4,9 +4,11 @@ const cors = require("cors");
 const { spawn } = require("child_process");
 const path = require("path");
 const fs = require("fs");
+const Groq = require("groq-sdk");
 
 const app = express();
 const upload = multer({ dest: "uploads/" });
+const groq = new Groq({ apiKey: process.env.GROQ_API_KEY });
 
 app.use(cors({
   origin: "*",
@@ -43,90 +45,77 @@ function sendProgress(jobId, percent, label) {
   }
 }
 
-// ── GENERATE ENDPOINT ─────────────────────────────────────────────────────────
-app.post("/generate", upload.single("video"), (req, res) => {
+// ── GENERATE ENDPOINT (Groq AI) ───────────────────────────────────────────────
+app.post("/generate", upload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const jobId = req.body.jobId || Date.now().toString();
   const videoPath = path.resolve(req.file.path);
-  const outputDir = path.resolve("uploads");
-  const baseName = req.file.filename;
   const translate = req.body.translate === "true";
   const language = req.body.language || null;
 
   console.log(`✅ Video received | translate: ${translate} | language: ${language}`);
 
-  const args = [
-    "-m", "whisper", videoPath,
-    "--model", "tiny",
-    "--output_format", "json",
-    "--output_dir", outputDir,
-  ];
+  try {
+    sendProgress(jobId, 10, "Uploading to Groq...");
 
-  if (translate) { args.push("--task", "translate"); }
-  else { args.push("--task", "transcribe"); }
-  if (language) { args.push("--language", language); }
+    // Check file size — Groq limit is 25MB
+    const stats = fs.statSync(videoPath);
+    const fileSizeMB = stats.size / (1024 * 1024);
+    console.log(`📦 File size: ${fileSizeMB.toFixed(2)} MB`);
 
-  console.log("🎙️ Running Whisper:", args.join(" "));
-
-  const whisper = spawn("python", args);
-  let totalDuration = null;
-  let lastPercent = 10;
-
-  sendProgress(jobId, 10, "Extracting audio...");
-
-  whisper.stderr.on("data", (data) => {
-    const text = data.toString();
-    console.log("Whisper:", text.trim());
-
-    const durMatch = text.match(/Duration:\s*(\d+):(\d+):(\d+)/);
-    if (durMatch) {
-      totalDuration = parseInt(durMatch[1]) * 3600 + parseInt(durMatch[2]) * 60 + parseInt(durMatch[3]);
+    if (fileSizeMB > 24) {
+      sendProgress(jobId, 0, "File too large! Max 25MB.");
+      fs.unlinkSync(videoPath);
+      return res.status(400).json({ error: "File too large. Please upload a video under 25MB." });
     }
 
-    const segMatch = text.match(/\[(\d+):(\d+\.\d+) --> (\d+):(\d+\.\d+)\]/);
-    if (segMatch && totalDuration) {
-      const current = parseInt(segMatch[1]) * 60 + parseFloat(segMatch[2]);
-      const pct = Math.min(90, Math.round(10 + (current / totalDuration) * 80));
-      if (pct > lastPercent) { lastPercent = pct; sendProgress(jobId, pct, `Transcribing... ${pct}%`); }
-    }
-  });
+    sendProgress(jobId, 30, "Transcribing with Groq AI...");
 
-  whisper.on("close", (code) => {
-    if (code !== 0) {
-      sendProgress(jobId, 0, "Error!");
-      return res.status(500).json({ error: "Whisper failed" });
-    }
+    const fileStream = fs.createReadStream(videoPath);
 
-    sendProgress(jobId, 92, "Building captions...");
-    const jsonPath = path.join(outputDir, baseName + ".json");
+    const transcriptionOptions = {
+      file: fileStream,
+      model: "whisper-large-v3-turbo",
+      response_format: "verbose_json",
+      timestamp_granularities: ["segment"],
+      task: translate ? "translate" : "transcribe",
+    };
 
-    if (!fs.existsSync(jsonPath)) {
-      return res.status(500).json({ error: "Whisper output not found" });
+    if (language && !translate) {
+      transcriptionOptions.language = language;
     }
 
-    try {
-      const raw = JSON.parse(fs.readFileSync(jsonPath, "utf8"));
-      const captions = raw.segments.map((seg, i) => ({
-        id: i + 1,
-        start: parseFloat(seg.start.toFixed(2)),
-        end: parseFloat(seg.end.toFixed(2)),
-        text: seg.text.trim(),
-      }));
+    const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
 
-      try { fs.unlinkSync(videoPath); } catch(e) {}
-      try { fs.unlinkSync(jsonPath); } catch(e) {}
+    sendProgress(jobId, 88, "Building captions...");
 
-      sendProgress(jobId, 100, "Done! 🎉");
-      setTimeout(() => res.json(captions), 400);
-
-    } catch (parseErr) {
-      res.status(500).json({ error: "Failed to parse Whisper output" });
+    if (!transcription.segments || transcription.segments.length === 0) {
+      throw new Error("No speech detected in the video.");
     }
-  });
+
+    const captions = transcription.segments.map((seg, i) => ({
+      id: i + 1,
+      start: parseFloat(seg.start.toFixed(2)),
+      end: parseFloat(seg.end.toFixed(2)),
+      text: seg.text.trim(),
+    }));
+
+    try { fs.unlinkSync(videoPath); } catch(e) {}
+
+    sendProgress(jobId, 100, "Done! 🎉");
+    console.log(`✅ Transcription complete — ${captions.length} segments`);
+    setTimeout(() => res.json(captions), 400);
+
+  } catch (err) {
+    console.error("❌ Groq error:", err.message || err);
+    sendProgress(jobId, 0, "Error!");
+    try { fs.unlinkSync(videoPath); } catch(e) {}
+    res.status(500).json({ error: err.message || "Groq transcription failed" });
+  }
 });
 
-// ── EXPORT ENDPOINT ───────────────────────────────────────────────────────────
+// ── EXPORT ENDPOINT (FFmpeg) ──────────────────────────────────────────────────
 app.post("/export", upload.single("video"), (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
@@ -161,7 +150,6 @@ app.post("/export", upload.single("video"), (req, res) => {
 
   fs.writeFileSync(srtPath, srtContent);
 
-  // ✅ FIX: Windows path — backslash to forward slash + colon escape
   const srtFixed = srtPath.replace(/\\/g, "/").replace(/:/g, "\\:");
 
   const ffmpegArgs = [
@@ -173,7 +161,6 @@ app.post("/export", upload.single("video"), (req, res) => {
   ];
 
   console.log("🎬 Running FFmpeg export...");
-  console.log("SRT path:", srtFixed);
 
   const ffmpeg = spawn("ffmpeg", ffmpegArgs);
 
