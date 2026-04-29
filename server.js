@@ -51,42 +51,38 @@ app.post("/generate", upload.single("video"), async (req, res) => {
 
   const jobId = req.body.jobId || Date.now().toString();
   const videoPath = path.resolve(req.file.path);
+  const audioPath = videoPath + ".mp3";
   const translate = req.body.translate === "true";
-  const language = req.body.language || null;
-
-  console.log(`✅ Video received | translate: ${translate} | language: ${language}`);
 
   try {
-    sendProgress(jobId, 10, "Uploading to Groq...");
+    sendProgress(jobId, 10, "Extracting audio...");
 
-    // Check file size — Groq limit is 25MB
-    const stats = fs.statSync(videoPath);
-    const fileSizeMB = stats.size / (1024 * 1024);
-    console.log(`📦 File size: ${fileSizeMB.toFixed(2)} MB`);
+    // ✅ FFmpeg se audio extract karo
+    await new Promise((resolve, reject) => {
+      const ffmpeg = spawn("ffmpeg", [
+        "-i", videoPath,
+        "-vn",
+        "-acodec", "mp3",
+        "-y",
+        audioPath
+      ]);
+      ffmpeg.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error("FFmpeg audio extraction failed"));
+      });
+    });
 
-    if (fileSizeMB > 24) {
-      sendProgress(jobId, 0, "File too large! Max 25MB.");
-      fs.unlinkSync(videoPath);
-      return res.status(400).json({ error: "File too large. Please upload a video under 25MB." });
-    }
+    sendProgress(jobId, 40, "Transcribing with Groq AI...");
 
-    sendProgress(jobId, 30, "Transcribing with Groq AI...");
+    const fileStream = fs.createReadStream(audioPath);
 
-    const fileStream = fs.createReadStream(videoPath);
-
-    const transcriptionOptions = {
+    const transcription = await groq.audio.transcriptions.create({
       file: fileStream,
       model: "whisper-large-v3-turbo",
       response_format: "verbose_json",
       timestamp_granularities: ["segment"],
       task: translate ? "translate" : "transcribe",
-    };
-
-    if (language && !translate) {
-      transcriptionOptions.language = language;
-    }
-
-    const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
+    });
 
     sendProgress(jobId, 88, "Building captions...");
 
@@ -102,15 +98,16 @@ app.post("/generate", upload.single("video"), async (req, res) => {
     }));
 
     try { fs.unlinkSync(videoPath); } catch(e) {}
+    try { fs.unlinkSync(audioPath); } catch(e) {}
 
     sendProgress(jobId, 100, "Done! 🎉");
-    console.log(`✅ Transcription complete — ${captions.length} segments`);
     setTimeout(() => res.json(captions), 400);
 
   } catch (err) {
     console.error("❌ Groq error:", err.message || err);
     sendProgress(jobId, 0, "Error!");
     try { fs.unlinkSync(videoPath); } catch(e) {}
+    try { fs.unlinkSync(audioPath); } catch(e) {}
     res.status(500).json({ error: err.message || "Groq transcription failed" });
   }
 });
