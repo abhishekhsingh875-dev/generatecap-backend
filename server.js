@@ -83,14 +83,14 @@ if (translate) {
     file: fileStream,
     model: "whisper-large-v3-turbo",
     response_format: "verbose_json",
-    timestamp_granularities: ["segment"],
+    
   });
 } else {
   transcription = await groq.audio.transcriptions.create({
     file: fileStream,
     model: "whisper-large-v3-turbo",
     response_format: "verbose_json",
-    timestamp_granularities: ["segment"],
+    
   });
 }
     sendProgress(jobId, 88, "Building captions...");
