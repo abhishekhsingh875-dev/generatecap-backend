@@ -76,14 +76,23 @@ app.post("/generate", upload.single("video"), async (req, res) => {
 
     const fileStream = fs.createReadStream(audioPath);
 
-    const transcription = await groq.audio.transcriptions.create({
-      file: fileStream,
-      model: "whisper-large-v3-turbo",
-      response_format: "verbose_json",
-      timestamp_granularities: ["segment"],
-      task: translate ? "translate" : "transcribe",
-    });
-
+  let transcription;
+if (translate) {
+  // Translation ke liye alag endpoint
+  transcription = await groq.audio.translations.create({
+    file: fileStream,
+    model: "whisper-large-v3-turbo",
+    response_format: "verbose_json",
+    timestamp_granularities: ["segment"],
+  });
+} else {
+  transcription = await groq.audio.transcriptions.create({
+    file: fileStream,
+    model: "whisper-large-v3-turbo",
+    response_format: "verbose_json",
+    timestamp_granularities: ["segment"],
+  });
+}
     sendProgress(jobId, 88, "Building captions...");
 
     if (!transcription.segments || transcription.segments.length === 0) {
