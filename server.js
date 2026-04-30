@@ -19,7 +19,7 @@ app.use(cors({
 app.options("*", (req, res) => {
   res.setHeader("Access-Control-Allow-Origin", "*");
   res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
+  res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
   res.sendStatus(200);
 });
 app.use(express.json());
@@ -45,86 +45,126 @@ function sendProgress(jobId, percent, label) {
   }
 }
 
+// ── HELPER: Split long captions into small word chunks ────────────────────────
+function chunkCaptions(segments, wordsPerChunk = 4) {
+  const chunked = [];
+  let id = 1;
+
+  segments.forEach(seg => {
+    const words = seg.text.trim().split(/\s+/).filter(Boolean);
+    if (words.length === 0) return;
+
+    const duration = seg.end - seg.start;
+    const timePerWord = duration / words.length;
+
+    for (let i = 0; i < words.length; i += wordsPerChunk) {
+      const chunk = words.slice(i, i + wordsPerChunk).join(" ");
+      const start = parseFloat((seg.start + i * timePerWord).toFixed(2));
+      const end = parseFloat((seg.start + Math.min((i + wordsPerChunk) * timePerWord, duration)).toFixed(2));
+      chunked.push({ id: id++, start, end, text: chunk });
+    }
+  });
+
+  return chunked;
+}
+
 // ── GENERATE ENDPOINT (Groq AI) ───────────────────────────────────────────────
 app.post("/generate", upload.single("video"), async (req, res) => {
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const jobId = req.body.jobId || Date.now().toString();
   const videoPath = path.resolve(req.file.path);
+  const audioPath = videoPath + "_audio.mp3";
   const translate = req.body.translate === "true";
-  const language = req.body.language || null;
+  const wordsPerChunk = parseInt(req.body.wordsPerChunk) || 4;
 
-  console.log(`✅ Video received | translate: ${translate} | language: ${language}`);
+  console.log(`✅ Video received | translate: ${translate} | wordsPerChunk: ${wordsPerChunk}`);
 
   try {
-    sendProgress(jobId, 10, "Uploading to Groq...");
+    sendProgress(jobId, 10, "Extracting audio...");
 
-    // Check file size — Groq limit is 25MB
-    const stats = fs.statSync(videoPath);
+    // Extract audio with FFmpeg
+    await new Promise((resolve, reject) => {
+      const ffmpeg = spawn("ffmpeg", [
+        "-i", videoPath,
+        "-vn",
+        "-acodec", "mp3",
+        "-ar", "16000",
+        "-ac", "1",
+        "-y",
+        audioPath
+      ]);
+      ffmpeg.stderr.on("data", (d) => console.log("FFmpeg:", d.toString().trim()));
+      ffmpeg.on("close", (code) => {
+        if (code === 0) resolve();
+        else reject(new Error("FFmpeg audio extraction failed"));
+      });
+    });
+
+    // Check audio file size
+    const stats = fs.statSync(audioPath);
     const fileSizeMB = stats.size / (1024 * 1024);
-    console.log(`📦 File size: ${fileSizeMB.toFixed(2)} MB`);
+    console.log(`📦 Audio size: ${fileSizeMB.toFixed(2)} MB`);
 
     if (fileSizeMB > 24) {
-      sendProgress(jobId, 0, "File too large! Max 25MB.");
-      fs.unlinkSync(videoPath);
-      return res.status(400).json({ error: "File too large. Please upload a video under 25MB." });
+      sendProgress(jobId, 0, "File too large! Max ~24MB audio.");
+      try { fs.unlinkSync(videoPath); } catch(e) {}
+      try { fs.unlinkSync(audioPath); } catch(e) {}
+      return res.status(400).json({ error: "Audio too large for Groq (max 25MB). Please upload a shorter video." });
     }
 
-    sendProgress(jobId, 30, "Transcribing with Groq AI...");
+    sendProgress(jobId, 40, "Transcribing with Groq AI...");
 
-    const fileStream = fs.createReadStream(videoPath);
+    // ✅ Fix: Read file into buffer and wrap with proper name+type for Groq
+    const { toFile } = require("groq-sdk");
+    const audioBuffer = fs.readFileSync(audioPath);
+    const fileObj = await toFile(audioBuffer, "audio.mp3", { type: "audio/mpeg" });
 
-    const transcriptionOptions = {
-      file: fileStream,
-      model: "whisper-large-v3-turbo",
-      response_format: "verbose_json",
-      timestamp_granularities: ["segment"],
-      task: translate ? "translate" : "transcribe",
-    };
+    let transcription;
 
-    if (language && !translate) {
-      transcriptionOptions.language = language;
+    if (translate) {
+      transcription = await groq.audio.translations.create({
+        file: fileObj,
+        model: "whisper-large-v3",
+        response_format: "verbose_json",
+        timestamp_granularities: ["segment"],
+      });
+    } else {
+      transcription = await groq.audio.transcriptions.create({
+        file: fileObj,
+        model: "whisper-large-v3-turbo",
+        response_format: "verbose_json",
+        timestamp_granularities: ["segment"],
+      });
     }
 
-    const transcription = await groq.audio.transcriptions.create(transcriptionOptions);
-
-    sendProgress(jobId, 88, "Building captions...");
+    sendProgress(jobId, 85, "Building captions...");
 
     if (!transcription.segments || transcription.segments.length === 0) {
       throw new Error("No speech detected in the video.");
     }
 
-    const captions = transcription.segments.map((seg, i) => ({
-      id: i + 1,
-      start: parseFloat(seg.start.toFixed(2)),
-      end: parseFloat(seg.end.toFixed(2)),
-      text: seg.text.trim(),
-    }));
+    // Split into word chunks for clean mobile display
+    const captions = chunkCaptions(transcription.segments, wordsPerChunk);
 
     try { fs.unlinkSync(videoPath); } catch(e) {}
+    try { fs.unlinkSync(audioPath); } catch(e) {}
 
     sendProgress(jobId, 100, "Done! 🎉");
-    console.log(`✅ Transcription complete — ${captions.length} segments`);
+    console.log(`✅ Done — ${captions.length} caption chunks`);
     setTimeout(() => res.json(captions), 400);
 
   } catch (err) {
-    console.error("❌ Groq error:", err.message || err);
+    console.error("❌ Error:", err.message || err);
     sendProgress(jobId, 0, "Error!");
     try { fs.unlinkSync(videoPath); } catch(e) {}
-    res.status(500).json({ error: err.message || "Groq transcription failed" });
+    try { fs.unlinkSync(audioPath); } catch(e) {}
+    res.status(500).json({ error: err.message || "Transcription failed" });
   }
-});
-app.options("/export", (req, res) => {
-  
-  res.setHeader("Access-Control-Allow-Origin", "*");
-  res.setHeader("Access-Control-Allow-Methods", "GET, POST, OPTIONS");
-  res.setHeader("Access-Control-Allow-Headers", "Content-Type");
-  res.sendStatus(200);
 });
 
 // ── EXPORT ENDPOINT (FFmpeg) ──────────────────────────────────────────────────
 app.post("/export", upload.single("video"), (req, res) => {
-  res.setHeader("Access-Control-Allow-Origin", "*");
   if (!req.file) return res.status(400).json({ error: "No file uploaded" });
 
   const videoPath = path.resolve(req.file.path);
@@ -141,7 +181,7 @@ app.post("/export", upload.single("video"), (req, res) => {
   const style = JSON.parse(req.body.style || "{}");
   const fontSize = style.size || 24;
 
-  // Build SRT file
+  // Build SRT
   const srtPath = path.join(outputDir, `sub_${Date.now()}.srt`);
   const pad = (n) => String(Math.floor(n)).padStart(2, "0");
   const toSRTTime = (s) => {
@@ -171,22 +211,18 @@ app.post("/export", upload.single("video"), (req, res) => {
   console.log("🎬 Running FFmpeg export...");
 
   const ffmpeg = spawn("ffmpeg", ffmpegArgs);
-
-  ffmpeg.stderr.on("data", (data) => {
-    console.log("FFmpeg:", data.toString().trim());
-  });
+  ffmpeg.stderr.on("data", (data) => console.log("FFmpeg:", data.toString().trim()));
 
   ffmpeg.on("close", (code) => {
     try { fs.unlinkSync(videoPath); } catch(e) {}
     try { fs.unlinkSync(srtPath); } catch(e) {}
 
     if (code !== 0) {
-      console.error("❌ FFmpeg failed");
+      console.error("❌ FFmpeg export failed");
       return res.status(500).json({ error: "FFmpeg export failed" });
     }
 
-    console.log("✅ Export done! Sending file...");
-
+    console.log("✅ Export done!");
     res.download(outputFile, "GenerateYourCap_export.mp4", (err) => {
       if (err) console.error("Download error:", err);
       try { fs.unlinkSync(outputFile); } catch(e) {}
